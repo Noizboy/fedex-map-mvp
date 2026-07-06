@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=fedex_truck_gps_v10" />
+    <script>
+      window.APP_CONFIG = {
+        pageType: "instance",
+        googleMapsApiKey: {{ google_maps_api_key | tojson }},
+        instanceSlug: {{ instance.slug | tojson }},
+        instanceName: {{ instance.name | tojson }},
+        instanceConfig: {{ instance.config | tojson }},
+      };
+    </script>
+    <script defer src="/static/app.js?v=fedex_truck_gps_v15"></script>
+    <script defer src="https://unpkg.com/lucide@latest"></script>
+    <script defer>
+      window.addEventListener("DOMContentLoaded", function () {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <main class="fullscreen-shell">
+      <div class="map-toolbar">
+        <div class="instance-menu">
+          <button
+            id="instance-menu-trigger"
+            class="instance-chip instance-menu-trigger"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="instance-menu-dropdown"
+          >
+            <span class="instance-chip-label">Instance</span>
+            <strong>{{ instance.name }}</strong>
+            <span class="instance-menu-caret" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+          </button>
+          <div id="instance-menu-dropdown" class="instance-menu-dropdown hidden" role="menu" aria-labelledby="instance-menu-trigger">
+            <button id="open-import" type="button" class="instance-menu-action" role="menuitem">Import JSON</button>
+            <button id="reload-map" type="button" class="instance-menu-action" role="menuitem">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <button id="toggle-completed-stops" class="top-right-toggle icon-button secondary" type="button" aria-label="Show completed stops" title="Show completed stops">
+        <i data-lucide="eye"></i>
+      </button>
+
+      <button id="gps-center" class="gps-control" type="button" aria-label="Center on my location">
+        <span class="gps-icon" aria-hidden="true">
+          <i data-lucide="crosshair"></i>
+        </span>
+        <span class="gps-pulse" aria-hidden="true"></span>
+      </button>
+
+      <section class="map-stage" aria-label="Main map">
+        <div id="map"></div>
+      </section>
+
+      <section id="list-panel" class="app-panel hidden" aria-label="Stops list" aria-hidden="true">
+        <div class="panel-sheet">
+          <div class="panel-header">
+            <h2>Stops List</h2>
+            <p>All stops for this instance, sorted by stop number.</p>
+          </div>
+          <div class="list-controls">
+            <input id="list-search" class="list-search-input" type="search" placeholder="Search by address" aria-label="Search by address" />
+            <select id="list-status-filter" class="list-filter-select" aria-label="Filter by completion status">
+              <option value="all">All statuses</option>
+              <option value="pending">Not completed</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div id="stops-list" class="stops-list"></div>
+        </div>
+      </section>
+
+      <section id="coming-soon-panel" class="app-panel hidden" aria-label="Coming soon" aria-hidden="true">
+        <div class="panel-sheet coming-soon-sheet">
+          <div class="coming-soon-badge">Next Phase</div>
+          <div class="coming-soon-copy">
+            <h2 id="coming-soon-title">Coming Soon</h2>
+            <p id="coming-soon-description">This section is currently being prepared.</p>
+          </div>
+          <div class="coming-soon-card-grid">
+            <article class="coming-soon-card">
+              <span class="coming-soon-card-label">Planned</span>
+              <strong id="coming-soon-feature">New tools are on the way</strong>
+              <p id="coming-soon-detail">We are building out the next part of the workflow for this menu.</p>
+            </article>
+            <article class="coming-soon-card accent">
+              <span class="coming-soon-card-label">Status</span>
+              <strong>Under construction</strong>
+              <p>Use Home and List for the currently available experience.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="selected-stop-actions" class="selected-stop-actions hidden" aria-hidden="true">
+        <a
+          id="open-google-maps"
+          class="map-action-button"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open in Google Maps"
+          title="Open in Google Maps"
+        >
+          <i data-lucide="external-link"></i>
+        </a>
+        <button
+          id="complete-stop"
+          class="map-action-button secondary"
+          type="button"
+          aria-label="Mark as completed"
+          title="Mark as completed"
+        >
+          <i data-lucide="check"></i>
+        </button>
+      </section>
+
+      <section id="import-panel" class="import-panel hidden" aria-hidden="true">
+        <div class="import-panel-header">
+          <h2>Import stops</h2>
+          <button id="close-import" type="button" class="icon-button" aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <p>Paste a JSON object or an array of JSON objects for this instance.</p>
+        <textarea id="json-input" rows="10" spellcheck="false">{
+  "records": []
+}</textarea>
+        <div class="row">
+          <button id="send-json" type="button">Save</button>
+          <button id="clear-json" type="button" class="secondary">Clear</button>
+        </div>
+        <p id="status" class="status"></p>
+      </section>
+
+      <nav class="phone-navbar" aria-label="Main navigation">
+        <button class="phone-nav-item active" type="button" data-tab="home" aria-label="Home">
+          <span class="phone-nav-icon" aria-hidden="true"><i data-lucide="house"></i></span>
+          <span>Home</span>
+        </button>
+        <button class="phone-nav-item" type="button" data-tab="list" aria-label="Stops list">
+          <span class="phone-nav-icon" aria-hidden="true"><i data-lucide="list"></i></span>
+          <span>List</span>
+        </button>
+        <button class="phone-nav-item" type="button" data-tab="performance" aria-label="Performance">
+          <span class="phone-nav-icon" aria-hidden="true"><i data-lucide="chart-column"></i></span>
+          <span>Performance</span>
+        </button>
+        <button class="phone-nav-item" type="button" data-tab="options" aria-label="Options">
+          <span class="phone-nav-icon" aria-hidden="true"><i data-lucide="settings"></i></span>
+          <span>Options</span>
+        </button>
+      </nav>
+    </main>
+  </body>
+</html>

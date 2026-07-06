@@ -1,0 +1,100 @@
+{
+  "records": [
+    {
+      "stop_number": 1,
+      "house_number": "715",
+      "street_name": "Bloom Street",
+      "lat": 28.3172378,
+      "lng": -81.5413448,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 2,
+      "house_number": "621",
+      "street_name": "Campus Street",
+      "lat": 28.3184449,
+      "lng": -81.542266,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 3,
+      "house_number": "611",
+      "street_name": "Campus Street",
+      "lat": 28.3185111,
+      "lng": -81.5422832,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 4,
+      "house_number": "701",
+      "street_name": "Front Street",
+      "lat": 28.3181188,
+      "lng": -81.5407322,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 5,
+      "house_number": "611",
+      "street_name": "Market Street",
+      "lat": 28.3187163,
+      "lng": -81.5406498,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 6,
+      "house_number": "605",
+      "street_name": "Market Street",
+      "lat": 28.3185057,
+      "lng": -81.5405271,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 7,
+      "house_number": "601",
+      "street_name": "Market Street",
+      "lat": 28.318846,
+      "lng": -81.5403306,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 8,
+      "house_number": "610",
+      "street_name": "Sycamore Street",
+      "lat": 28.3186116,
+      "lng": -81.539402,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 9,
+      "house_number": "604",
+      "street_name": "Sycamore Street",
+      "lat": 28.3190562,
+      "lng": -81.5392748,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 10,
+      "house_number": "617",
+      "street_name": "Front Street",
+      "lat": 28.3185545,
+      "lng": -81.5377835,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 11,
+      "house_number": "609",
+      "street_name": "Front Street",
+      "lat": 28.3192123,
+      "lng": -81.5369244,
+      "source": "demo-delivery-real"
+    },
+    {
+      "stop_number": 12,
+      "house_number": "603",
+      "street_name": "Front Street",
+      "lat": 28.3194107,
+      "lng": -81.5367916,
+      "source": "demo-delivery-real"
+    }
+  ]
+}

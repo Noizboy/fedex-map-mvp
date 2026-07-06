@@ -1,0 +1,29 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local app data and logs
+logs/
+data/*.sqlite3
+
+# Local tooling
+testsprite_tests/
+.opencode/
+
+# OS / editor
+.DS_Store
+Thumbs.db

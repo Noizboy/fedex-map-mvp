@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=fedex_truck_gps_v10" />
+    <script>
+      window.APP_CONFIG = {
+        pageType: "landing",
+        googleMapsApiKey: {{ google_maps_api_key | tojson }},
+      };
+    </script>
+    <script defer src="/static/app.js?v=fedex_truck_gps_v15"></script>
+  </head>
+  <body>
+    <main class="landing-shell">
+      <section class="landing-hero">
+        <div class="landing-copy">
+          <span class="landing-eyebrow">Instance-Based Workspace</span>
+          <h1>Create your own route instance</h1>
+          <p>Each instance gets its own URL, isolated stops, and its own JSON mapping configuration for ingestion.</p>
+        </div>
+
+        <form id="create-instance-form" class="landing-card">
+          <label class="field">
+            <span>Instance name</span>
+            <input id="instance-name" name="name" type="text" placeholder="FedEx Orlando AM" required />
+          </label>
+
+          <label class="field">
+            <span>Upload JSON</span>
+            <input id="instance-json-file" name="json_file" type="file" accept="application/json,.json" />
+          </label>
+
+          <label class="field">
+            <span>JSON text</span>
+            <textarea id="instance-json" name="initial_json" rows="8" spellcheck="false" placeholder='{"records":[{"text":"124 W Sample Rd"}]}'></textarea>
+          </label>
+
+          <button id="create-instance-button" type="submit">Create instance</button>
+          <p id="landing-status" class="status landing-status"></p>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

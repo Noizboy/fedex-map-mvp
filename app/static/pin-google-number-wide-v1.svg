@@ -1,0 +1,22 @@
+<svg width="56" height="68" viewBox="0 0 56 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="4" y="6" width="48" height="58" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="2"/>
+      <feGaussianBlur stdDeviation="2"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0588235 0 0 0 0 0.0941176 0 0 0 0 0.160784 0 0 0 0.2 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <linearGradient id="pinFill" x1="28" y1="10" x2="28" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4D4F"/>
+      <stop offset="1" stop-color="#D9363E"/>
+    </linearGradient>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M28 10C17.5066 10 9 18.5066 9 29C9 42.1345 24.9429 55.9557 27.2795 57.9088C27.6999 58.2602 28.3001 58.2602 28.7205 57.9088C31.0571 55.9557 47 42.1345 47 29C47 18.5066 38.4934 10 28 10Z" fill="url(#pinFill)"/>
+    <path d="M28 10.75C17.9208 10.75 9.75 18.9208 9.75 29C9.75 35.2987 13.5917 41.7872 18.4064 47.3709C22.2856 51.8696 26.2913 55.1433 28 56.5424C29.7087 55.1433 33.7144 51.8696 37.5936 47.3709C42.4083 41.7872 46.25 35.2987 46.25 29C46.25 18.9208 38.0792 10.75 28 10.75Z" stroke="#A61D24" stroke-opacity="0.32" stroke-width="1.5"/>
+  </g>
+</svg>
