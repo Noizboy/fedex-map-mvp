@@ -110,6 +110,76 @@ def test_google_maps_api_key_can_be_loaded_from_dotenv(tmp_path, monkeypatch):
     assert "dotenv-test-key" in response.text
 
 
+def test_user_location_icon_scales_with_zoom(tmp_path, monkeypatch):
+    """The blue-dot user-location icon must rescale with the map zoom to
+    mimic the native Google Maps behavior, not use a single fixed pixel size.
+    The size must also account for latitude so the dot grows slightly with
+    |lat|, matching the Mercator stretching of the native blue dot.
+    """
+    client = create_test_client(tmp_path, monkeypatch)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    body = response.text
+
+    # The scaling helper must exist and be referenced from both the marker
+    # creation path (drawUserLocation) and the zoom_changed listener
+    # (refreshUserLocationIcon).
+    assert "function computeUserIconSize" in body
+    assert "computeUserIconSize(map.getZoom()" in body
+    assert "computeUserIconSize(map.getZoom(), current.lat)" in body
+
+    # The old fixed 60x60 default must be gone: the size should now come
+    # from the helper, not from a hard-coded constant.
+    assert "width: 60, height: 60" not in body
+
+    # Sanity: the curve we use must clamp to the documented min/max so the
+    # dot stays visible at any zoom.
+    assert "Math.max(14, Math.min(32," in body
+
+    # Latitude-aware Mercator correction: the dot must grow with |lat| to
+    # match the way the native Google Maps blue dot is stretched by the
+    # projection at high latitudes.
+    assert "latFactor" in body
+    assert "Math.cos(latRad)" in body
+    assert "lat * Math.PI / 180" in body
+
+
+def test_user_location_ping_animation_matches_native_google_maps(tmp_path, monkeypatch):
+    """The user location must show the native Google Maps "ping" animation
+    (expanding ring) on the first acquisition and on user-initiated
+    re-locations, and the animation must be properly torn down.
+    """
+    client = create_test_client(tmp_path, monkeypatch)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    body = response.text
+
+    # The pulse helpers and state must exist.
+    assert "function pulseUserLocation" in body
+    assert "function cancelUserPulse" in body
+    assert "let userPulseCircle" in body
+    assert "let userPulseAnimationId" in body
+
+    # The animation must use requestAnimationFrame / cancelAnimationFrame
+    # for smooth, native-feeling timing.
+    assert "requestAnimationFrame" in body
+    assert "cancelAnimationFrame" in body
+
+    # drawUserLocation must accept and use the shouldPulse flag, and the
+    # centerOnGps entry point must opt in (user-initiated action).
+    assert "function drawUserLocation(position, shouldCenter = true, shouldPulse = false)" in body
+    assert "drawUserLocation(position, true, true)" in body
+    assert "isFirstDraw || shouldPulse" in body
+
+    # The ping must be cleaned up in clearUserLocation so we never leak a
+    # circle or an animation frame when the user location is reset.
+    assert "cancelUserPulse();" in body
+
+
 def test_create_instance_returns_summary_and_unique_slug(tmp_path):
     client = create_test_client(tmp_path)
 

@@ -4,6 +4,9 @@ let infoWindow;
 let googleMapsLoader;
 let userLocationMarker;
 let userAccuracyCircle;
+let userPulseCircle;
+let userPulseAnimationId = null;
+let userPulseStartTime = null;
 let userWatchId;
 let userHeading = null;
 let userPosition = null;
@@ -224,7 +227,8 @@ function clearMarkers() {
   markers = [];
 }
 
-/** Removes the user location marker, accuracy circle and stops tracking. */
+/** Removes the user location marker, accuracy circle, ping animation
+ *  and stops tracking. */
 function clearUserLocation() {
   if (userLocationMarker) {
     userLocationMarker.setMap(null);
@@ -234,6 +238,7 @@ function clearUserLocation() {
     userAccuracyCircle.setMap(null);
     userAccuracyCircle = null;
   }
+  cancelUserPulse();
   if (userWatchId !== undefined) {
     navigator.geolocation.clearWatch(userWatchId);
     userWatchId = undefined;
@@ -713,11 +718,18 @@ const USER_HEADING_CONE_PATH = 'M0,-28 L16,-2 A16,16 0 0 1 -16,-2 Z';
  * Builds a Google Maps SVG icon for the user's location that visually matches
  * the native Google Maps "blue dot with heading cone".
  *
- * @param {number|null} heading  Degrees from true north (0 = north, 90 = east).
- *                               When null/NaN, the cone is omitted.
- * @param {google.maps.Size}    [size]  Fixed pixel size of the icon.
+ * @param {number|null}        heading  Degrees from true north (0 = north,
+ *                                     90 = east). When null/NaN, the cone
+ *                                     is omitted.
+ * @param {{width:number,height:number}} size  Pixel size of the rendered icon.
+ *                                             Callers should pass the value
+ *                                             returned by
+ *                                             `computeUserIconSize(zoom, lat)`
+ *                                             so the dot scales with zoom
+ *                                             the same way the native Google
+ *                                             Maps blue dot does.
  */
-function createUserLocationIcon(heading, size = { width: 60, height: 60 }) {
+function createUserLocationIcon(heading, size) {
   const hasHeading = typeof heading === 'number' && isFinite(heading);
   const coneRotation = hasHeading ? heading : 0;
   const cone = hasHeading
@@ -734,12 +746,139 @@ function createUserLocationIcon(heading, size = { width: 60, height: 60 }) {
   };
 }
 
-/** Updates the marker icon if heading or position has changed enough to warrant it. */
+/**
+ * Returns the user-location icon size in pixels for the given map zoom,
+ * approximating the native Google Maps behavior where the blue dot is a
+ * small, fixed pixel size at low zoom and grows gently as the user zooms
+ * in to street level, with a subtle latitude correction that mirrors the
+ * Mercator stretching of the native Google Maps blue dot.
+ *
+ * The native Google Maps web/app UI scales the dot using a smooth,
+ * slightly sub-linear curve bounded to keep the dot visible and
+ * recognizable at any zoom (small enough to feel "anchored" at country
+ * view, large enough to read at street level). At higher latitudes the
+ * Mercator projection stretches the map east-west, so a real-world object
+ * of constant size takes more screen pixels. The native dot reflects
+ * that. We apply a gentle `latFactor` (1.0 at the equator, up to ~1.20
+ * near the poles) so the dot scales with latitude the way the native dot
+ * does, then clamp the result to a visible range.
+ *
+ * Reference values (clamped to [14, 32] px, equator / mid-latitudes):
+ *   zoom 0  -> 14 px   (country/continent view)
+ *   zoom 5  -> ~17 px
+ *   zoom 10 -> ~21 px  (city view)
+ *   zoom 15 -> ~26 px
+ *   zoom 18 -> ~29 px  (street level, near-native size)
+ *   zoom 21 -> ~32 px  (max size)
+ *
+ * @param {number}      zoom  Current map zoom level (typically 0-22).
+ * @param {number|null} lat   Latitude in degrees used to apply a gentle
+ *                            Mercator-aware correction. 1.0 at the
+ *                            equator, up to ~1.20 near the poles.
+ * @returns {{width: number, height: number}}
+ */
+function computeUserIconSize(zoom, lat) {
+  const safeZoom = (typeof zoom === 'number' && isFinite(zoom)) ? zoom : 12;
+  // Mercator latitude factor: 1.0 at the equator, 1 + (1 - cos(0))*0.2
+  // is the floor, and approaches 1.20 at the poles. The factor is kept
+  // gentle so the dot remains within the documented pixel range at any
+  // latitude + zoom combo (the final clamp catches the rest).
+  const latRad = (typeof lat === 'number' && isFinite(lat)) ? lat * Math.PI / 180 : 0;
+  const latFactor = 1 + (1 - Math.cos(latRad)) * 0.2;
+  // Base curve: ~14 px at zoom 0, ~32 px at zoom 21 (clamped).
+  const size = 14 * Math.pow(1.045, safeZoom) * latFactor;
+  const clamped = Math.max(14, Math.min(32, Math.round(size)));
+  return { width: clamped, height: clamped };
+}
+
+/** Updates the marker icon at the size appropriate for the current zoom. */
 function refreshUserLocationIcon() {
   if (!userLocationMarker || !window.google?.maps) {
     return;
   }
-  userLocationMarker.setIcon(createUserLocationIcon(userHeading));
+  const lat = (userPosition && typeof userPosition.lat === 'number')
+    ? userPosition.lat
+    : null;
+  const size = computeUserIconSize(map.getZoom(), lat);
+  userLocationMarker.setIcon(createUserLocationIcon(userHeading, size));
+}
+
+/**
+ * Plays the "ping" animation that the native Google Maps UI shows when the
+ * user location is first acquired or re-located. A ring expands outward
+ * from the dot and fades out, drawing attention to the just-found position.
+ *
+ * The animation is rendered as a Circle whose radius and stroke opacity
+ * are interpolated with an ease-out cubic curve over ~1.8s. It is metric
+ * (defined in meters) so it always covers the same real-world area
+ * regardless of zoom.
+ */
+function pulseUserLocation() {
+  if (!map || !window.google?.maps || !userPosition) {
+    return;
+  }
+  const maps = window.google.maps;
+
+  // Cancel any in-flight pulse so the new one starts cleanly.
+  cancelUserPulse();
+
+  // Anchor the ring on the current user position. If we don't yet have an
+  // accuracy circle, fall back to a sensible default radius.
+  const accuracy = userAccuracyCircle ? userAccuracyCircle.getRadius() : 25;
+  const startRadius = Math.max(8, Math.min(accuracy, 30));
+  const endRadius = Math.max(60, startRadius * 3.5);
+  const startStrokeOpacity = 0.55;
+  const duration = 1800; // ms
+  userPulseStartTime = performance.now();
+
+  userPulseCircle = new maps.Circle({
+    map,
+    center: userPosition,
+    radius: startRadius,
+    strokeColor: '#1a73e8',
+    strokeOpacity: startStrokeOpacity,
+    strokeWeight: 2,
+    fillOpacity: 0,
+    clickable: false,
+    zIndex: 9998, // above the accuracy halo, below the dot
+  });
+
+  function tick(now) {
+    if (!userPulseCircle) {
+      return;
+    }
+    const elapsed = now - userPulseStartTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // ease-out cubic: fast at the start, gentle as it fades
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const radius = startRadius + (endRadius - startRadius) * eased;
+    const strokeOpacity = startStrokeOpacity * (1 - progress);
+    userPulseCircle.setRadius(radius);
+    userPulseCircle.setOptions({ strokeOpacity });
+    if (progress < 1) {
+      userPulseAnimationId = requestAnimationFrame(tick);
+    } else {
+      userPulseCircle.setMap(null);
+      userPulseCircle = null;
+      userPulseAnimationId = null;
+      userPulseStartTime = null;
+    }
+  }
+
+  userPulseAnimationId = requestAnimationFrame(tick);
+}
+
+/** Stops any in-flight ping animation and removes its circle from the map. */
+function cancelUserPulse() {
+  if (userPulseAnimationId !== null) {
+    cancelAnimationFrame(userPulseAnimationId);
+    userPulseAnimationId = null;
+  }
+  if (userPulseCircle) {
+    userPulseCircle.setMap(null);
+    userPulseCircle = null;
+  }
+  userPulseStartTime = null;
 }
 
 /**
@@ -802,7 +941,7 @@ function disableDeviceOrientation() {
   deviceOrientationHandler = null;
 }
 
-function drawUserLocation(position, shouldCenter = true) {
+function drawUserLocation(position, shouldCenter = true, shouldPulse = false) {
   if (!map || !window.google?.maps) {
     return;
   }
@@ -816,17 +955,22 @@ function drawUserLocation(position, shouldCenter = true) {
     userHeading = coords.heading;
   }
 
-  if (!userLocationMarker) {
+  const iconSize = computeUserIconSize(map.getZoom(), current.lat);
+  const isFirstDraw = !userLocationMarker;
+
+  if (isFirstDraw) {
     userLocationMarker = new maps.Marker({
       map,
       position: current,
-      icon: createUserLocationIcon(userHeading),
+      icon: createUserLocationIcon(userHeading, iconSize),
       clickable: false,
       zIndex: 9999,
     });
   } else {
     userLocationMarker.setPosition(current);
-    refreshUserLocationIcon();
+    // Re-issue the icon at the size appropriate for the current zoom; the
+    // map may have been zoomed between the last draw and this one.
+    userLocationMarker.setIcon(createUserLocationIcon(userHeading, iconSize));
   }
 
   if (!userAccuracyCircle) {
@@ -851,6 +995,13 @@ function drawUserLocation(position, shouldCenter = true) {
     map.panTo(current);
     map.setZoom(Math.max(map.getZoom() || 16, 17));
   }
+
+  // Play the "locate me" ping on the first time we draw the user, or when
+  // explicitly requested by a user-initiated locate. Passive GPS updates
+  // (watchPosition) pass shouldPulse=false so the animation does not loop.
+  if (isFirstDraw || shouldPulse) {
+    pulseUserLocation();
+  }
 }
 
 async function centerOnGps(options = {}) {
@@ -866,7 +1017,7 @@ async function centerOnGps(options = {}) {
   setGpsButtonState(true, isUserLocated());
   navigator.geolocation.getCurrentPosition(
     (position) => {
-      drawUserLocation(position, true);
+      drawUserLocation(position, true, true);
       if (!silent) {
         setStatus('GPS centered on your current location.');
       }
@@ -921,9 +1072,11 @@ async function ensureMap() {
     window.__fedexDrawUserLocation = drawUserLocation;
     installMapZoomGestures(mapEl);
     infoWindow = new maps.InfoWindow();
-    // The user-location icon uses a fixed pixel scaledSize, so it does not
-    // inherently scale with zoom; force a repaint on zoom changes in case the
-    // renderer needs a refresh and to keep the icon crisp.
+    // The user-location icon size depends on the current zoom (see
+    // computeUserIconSize), so we re-issue the icon whenever the zoom
+    // changes. This mirrors the native Google Maps behavior where the
+    // blue dot grows gently as the user zooms in and shrinks when zooming
+    // out, keeping the dot readable and recognizable at any zoom level.
     map.addListener('zoom_changed', () => {
       refreshUserLocationIcon();
     });
