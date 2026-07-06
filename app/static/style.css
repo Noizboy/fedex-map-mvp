@@ -545,6 +545,10 @@ button {
   color: #11307c;
 }
 
+.top-right-toggle.hidden {
+  display: none;
+}
+
 .top-right-toggle svg {
   width: 18px;
   height: 18px;

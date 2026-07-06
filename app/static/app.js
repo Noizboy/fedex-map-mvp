@@ -394,6 +394,7 @@ function setActiveTab(tab) {
   const comingSoonPanel = document.getElementById('coming-soon-panel');
   const selectedStopActions = document.getElementById('selected-stop-actions');
   const gpsButton = document.getElementById('gps-center');
+  const completedStopsToggle = document.getElementById('toggle-completed-stops');
 
   document.querySelectorAll('.phone-nav-item').forEach((item) => {
     item.classList.toggle('active', item.dataset.tab === tab);
@@ -425,6 +426,10 @@ function setActiveTab(tab) {
 
   if (gpsButton) {
     gpsButton.classList.toggle('hidden', !isHome);
+  }
+
+  if (completedStopsToggle) {
+    completedStopsToggle.classList.toggle('hidden', !isHome);
   }
 
   if (selectedStopActions && !isHome) {
