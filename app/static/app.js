@@ -678,17 +678,6 @@ function isUserLocated() {
   return Boolean(userLocationMarker && userLocationMarker.getPosition());
 }
 
-function createFedExTruckLocationIcon(maps) {
-  const width = 96;
-  const height = 60;
-  return {
-    url: '/static/fedex-truck-location-v2.png?v=fedex_truck_location_v2',
-    scaledSize: new maps.Size(width, height),
-    origin: new maps.Point(0, 0),
-    anchor: new maps.Point(width / 2, height - 7),
-  };
-}
-
 function drawUserLocation(position, shouldCenter = true) {
   if (!map || !window.google?.maps) {
     return;
@@ -703,11 +692,9 @@ function drawUserLocation(position, shouldCenter = true) {
       position: current,
       title: 'My current location - FedEx truck',
       zIndex: 9999,
-      icon: createFedExTruckLocationIcon(maps),
     });
   } else {
     userLocationMarker.setPosition(current);
-    userLocationMarker.setIcon(createFedExTruckLocationIcon(maps));
   }
 
   if (!userAccuracyCircle) {
