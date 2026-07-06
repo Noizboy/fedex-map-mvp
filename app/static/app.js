@@ -2,9 +2,10 @@ let map;
 let markers = [];
 let infoWindow;
 let googleMapsLoader;
-let userLocationMarker;
+let userLocationDot;
 let userAccuracyCircle;
 let userWatchId;
+let preserveGpsViewport = false;
 let selectedStop = null;
 let selectedMarker = null;
 let allStops = [];
@@ -680,7 +681,7 @@ function setGpsButtonState(isLocating, isLocated = false) {
 }
 
 function isUserLocated() {
-  return Boolean(userLocationMarker && userLocationMarker.getPosition());
+  return Boolean(userLocationDot && userLocationDot.getCenter());
 }
 
 function drawUserLocation(position, shouldCenter = true) {
@@ -691,15 +692,21 @@ function drawUserLocation(position, shouldCenter = true) {
   const coords = position.coords;
   const current = { lat: coords.latitude, lng: coords.longitude };
 
-  if (!userLocationMarker) {
-    userLocationMarker = new maps.Marker({
+  if (!userLocationDot) {
+    userLocationDot = new maps.Circle({
       map,
-      position: current,
-      title: 'My current location - FedEx truck',
+      center: current,
+      radius: 7,
+      strokeColor: '#ffffff',
+      strokeOpacity: 1,
+      strokeWeight: 3,
+      fillColor: '#1a73e8',
+      fillOpacity: 1,
+      clickable: false,
       zIndex: 9999,
     });
   } else {
-    userLocationMarker.setPosition(current);
+    userLocationDot.setCenter(current);
   }
 
   if (!userAccuracyCircle) {
@@ -720,15 +727,19 @@ function drawUserLocation(position, shouldCenter = true) {
   }
 
   if (shouldCenter) {
+    preserveGpsViewport = true;
     map.panTo(current);
     map.setZoom(Math.max(map.getZoom() || 16, 17));
   }
 }
 
-async function centerOnGps() {
-  const maps = await ensureMap();
+async function centerOnGps(options = {}) {
+  const { silent = false } = options;
+  await ensureMap();
   if (!navigator.geolocation) {
-    setStatus('GPS not available on this device.', true);
+    if (!silent) {
+      setStatus('GPS not available on this device.', true);
+    }
     return;
   }
 
@@ -736,11 +747,15 @@ async function centerOnGps() {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       drawUserLocation(position, true);
-      setStatus('GPS centered on your current location.');
+      if (!silent) {
+        setStatus('GPS centered on your current location.');
+      }
       setGpsButtonState(false, true);
     },
     (error) => {
-      setStatus(`Could not access GPS: ${error.message}`, true);
+      if (!silent) {
+        setStatus(`Could not access GPS: ${error.message}`, true);
+      }
       setGpsButtonState(false, false);
     },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
@@ -856,6 +871,10 @@ async function renderMap(stops) {
     infoWindow.close();
     setSelectedStop(null);
   });
+
+  if (preserveGpsViewport && isUserLocated()) {
+    return;
+  }
 
   if (stops.length === 1) {
     map.setCenter({ lat: stops[0].lat, lng: stops[0].lng });
@@ -1148,6 +1167,7 @@ async function initInstancePage() {
 
   try {
     await fetchStops();
+    void centerOnGps({ silent: true });
   } catch (error) {
     setStatus(error.message, true);
   }
