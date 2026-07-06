@@ -3,6 +3,7 @@ let markers = [];
 let infoWindow;
 let googleMapsLoader;
 let userLocationDot;
+let userLocationHalo;
 let userAccuracyCircle;
 let userWatchId;
 let preserveGpsViewport = false;
@@ -692,14 +693,29 @@ function drawUserLocation(position, shouldCenter = true) {
   const coords = position.coords;
   const current = { lat: coords.latitude, lng: coords.longitude };
 
+  if (!userLocationHalo) {
+    userLocationHalo = new maps.Circle({
+      map,
+      center: current,
+      radius: 16,
+      strokeOpacity: 0,
+      fillColor: '#1a73e8',
+      fillOpacity: 0.22,
+      clickable: false,
+      zIndex: 9998,
+    });
+  } else {
+    userLocationHalo.setCenter(current);
+  }
+
   if (!userLocationDot) {
     userLocationDot = new maps.Circle({
       map,
       center: current,
-      radius: 7,
+      radius: 6,
       strokeColor: '#ffffff',
       strokeOpacity: 1,
-      strokeWeight: 3,
+      strokeWeight: 2.5,
       fillColor: '#1a73e8',
       fillOpacity: 1,
       clickable: false,
