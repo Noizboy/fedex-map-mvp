@@ -2,10 +2,12 @@ let map;
 let markers = [];
 let infoWindow;
 let googleMapsLoader;
-let userLocationDot;
-let userLocationHalo;
+let userLocationMarker;
 let userAccuracyCircle;
 let userWatchId;
+let userHeading = null;
+let userPosition = null;
+let deviceOrientationHandler = null;
 let preserveGpsViewport = false;
 let selectedStop = null;
 let selectedMarker = null;
@@ -220,6 +222,25 @@ function toggleInstanceMenu() {
 function clearMarkers() {
   markers.forEach((marker) => marker.setMap(null));
   markers = [];
+}
+
+/** Removes the user location marker, accuracy circle and stops tracking. */
+function clearUserLocation() {
+  if (userLocationMarker) {
+    userLocationMarker.setMap(null);
+    userLocationMarker = null;
+  }
+  if (userAccuracyCircle) {
+    userAccuracyCircle.setMap(null);
+    userAccuracyCircle = null;
+  }
+  if (userWatchId !== undefined) {
+    navigator.geolocation.clearWatch(userWatchId);
+    userWatchId = undefined;
+  }
+  disableDeviceOrientation();
+  userHeading = null;
+  userPosition = null;
 }
 
 function buildGoogleMapsUrl(stop) {
@@ -682,7 +703,103 @@ function setGpsButtonState(isLocating, isLocated = false) {
 }
 
 function isUserLocated() {
-  return Boolean(userLocationDot && userLocationDot.getCenter());
+  return Boolean(userLocationMarker && userLocationMarker.getPosition());
+}
+
+// SVG path for the heading cone (~120° wide, pointing up before rotation).
+const USER_HEADING_CONE_PATH = 'M0,-28 L16,-2 A16,16 0 0 1 -16,-2 Z';
+
+/**
+ * Builds a Google Maps SVG icon for the user's location that visually matches
+ * the native Google Maps "blue dot with heading cone".
+ *
+ * @param {number|null} heading  Degrees from true north (0 = north, 90 = east).
+ *                               When null/NaN, the cone is omitted.
+ * @param {google.maps.Size}    [size]  Fixed pixel size of the icon.
+ */
+function createUserLocationIcon(heading, size = { width: 60, height: 60 }) {
+  const hasHeading = typeof heading === 'number' && isFinite(heading);
+  const coneRotation = hasHeading ? heading : 0;
+  const cone = hasHeading
+    ? `<path d="${USER_HEADING_CONE_PATH}" fill="#1a73e8" fill-opacity="0.25" transform="rotate(${coneRotation})"/>`
+    : '';
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="-30 -30 60 60">`
+    + `<g>${cone}<circle r="10" fill="#1a73e8" stroke="#ffffff" stroke-width="3"/></g>`
+    + `</svg>`;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(size.width, size.height),
+    anchor: new window.google.maps.Point(size.width / 2, size.height / 2),
+  };
+}
+
+/** Updates the marker icon if heading or position has changed enough to warrant it. */
+function refreshUserLocationIcon() {
+  if (!userLocationMarker || !window.google?.maps) {
+    return;
+  }
+  userLocationMarker.setIcon(createUserLocationIcon(userHeading));
+}
+
+/**
+ * Handles deviceorientation events (mobile compass) to keep the heading cone
+ * pointing where the user is looking, even when stationary.
+ */
+function handleDeviceOrientation(event) {
+  let heading = null;
+  // iOS 13+ provides webkitCompassHeading (degrees from true north).
+  if (typeof event.webkitCompassHeading === 'number' && isFinite(event.webkitCompassHeading)) {
+    heading = event.webkitCompassHeading;
+  } else if (typeof event.alpha === 'number' && isFinite(event.alpha)) {
+    // Android: alpha is the compass rotation (0 = north) but in the opposite
+    // direction; convert to heading from north.
+    heading = (360 - event.alpha) % 360;
+  }
+  if (heading === null) {
+    return;
+  }
+  // Only refresh icon when the heading changes by >3° to avoid hammering setIcon.
+  if (userHeading === null || Math.abs(((heading - userHeading + 540) % 360) - 180) > 3) {
+    userHeading = heading;
+    refreshUserLocationIcon();
+  }
+}
+
+async function enableDeviceOrientation() {
+  if (typeof window === 'undefined' || typeof window.DeviceOrientationEvent === 'undefined') {
+    return;
+  }
+  // iOS 13+ requires permission requested from a user gesture.
+  if (typeof window.DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permission = await window.DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+  if (deviceOrientationHandler) {
+    return;
+  }
+  deviceOrientationHandler = handleDeviceOrientation;
+  // Prefer 'deviceorientationabsolute' when available for true-north heading.
+  if ('ondeviceorientationabsolute' in window) {
+    window.addEventListener('deviceorientationabsolute', deviceOrientationHandler, true);
+  } else {
+    window.addEventListener('deviceorientation', deviceOrientationHandler, true);
+  }
+}
+
+function disableDeviceOrientation() {
+  if (!deviceOrientationHandler) {
+    return;
+  }
+  window.removeEventListener('deviceorientationabsolute', deviceOrientationHandler, true);
+  window.removeEventListener('deviceorientation', deviceOrientationHandler, true);
+  deviceOrientationHandler = null;
 }
 
 function drawUserLocation(position, shouldCenter = true) {
@@ -692,37 +809,24 @@ function drawUserLocation(position, shouldCenter = true) {
   const maps = window.google.maps;
   const coords = position.coords;
   const current = { lat: coords.latitude, lng: coords.longitude };
+  userPosition = current;
 
-  if (!userLocationHalo) {
-    userLocationHalo = new maps.Circle({
-      map,
-      center: current,
-      radius: 16,
-      strokeOpacity: 0,
-      fillColor: '#1a73e8',
-      fillOpacity: 0.22,
-      clickable: false,
-      zIndex: 9998,
-    });
-  } else {
-    userLocationHalo.setCenter(current);
+  // Prefer GPS heading while moving; otherwise keep the compass-driven heading.
+  if (typeof coords.heading === 'number' && isFinite(coords.heading)) {
+    userHeading = coords.heading;
   }
 
-  if (!userLocationDot) {
-    userLocationDot = new maps.Circle({
+  if (!userLocationMarker) {
+    userLocationMarker = new maps.Marker({
       map,
-      center: current,
-      radius: 6,
-      strokeColor: '#ffffff',
-      strokeOpacity: 1,
-      strokeWeight: 2.5,
-      fillColor: '#1a73e8',
-      fillOpacity: 1,
+      position: current,
+      icon: createUserLocationIcon(userHeading),
       clickable: false,
       zIndex: 9999,
     });
   } else {
-    userLocationDot.setCenter(current);
+    userLocationMarker.setPosition(current);
+    refreshUserLocationIcon();
   }
 
   if (!userAccuracyCircle) {
@@ -777,6 +881,10 @@ async function centerOnGps(options = {}) {
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
   );
 
+  // Enable compass-driven heading cone (iOS requires the user gesture from the
+  // button click that triggered this function).
+  enableDeviceOrientation();
+
   if (userWatchId === undefined) {
     userWatchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -813,6 +921,12 @@ async function ensureMap() {
     window.__fedexDrawUserLocation = drawUserLocation;
     installMapZoomGestures(mapEl);
     infoWindow = new maps.InfoWindow();
+    // The user-location icon uses a fixed pixel scaledSize, so it does not
+    // inherently scale with zoom; force a repaint on zoom changes in case the
+    // renderer needs a refresh and to keep the icon crisp.
+    map.addListener('zoom_changed', () => {
+      refreshUserLocationIcon();
+    });
     return maps;
   } catch (error) {
     ensureMapContainerMessage(error.message);
